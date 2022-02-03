@@ -1,0 +1,81 @@
+
+
+
+class HomeScreen extends StatefulWidget {
+  @override
+  createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  final cookieManager = WebviewCookieManager();
+  static const channel = const MethodChannel("whatsappImageSharing");
+  final _analyticsController = Get.find<Analytics>();
+  final _homeController = Get.find<HomeController>();
+  CallBackModel callbackmodel;
+  WebViewController _webViewController;
+  CallBackHandler callBackHandler = CallBackHandler();
+  _HomeScreenState();
+
+  @override
+  void initState() {
+    super.initState();
+    _analyticsController.trackAnalyticsEventAsync(KEY_DASHBOARD);
+    cookieManager.clearCookies();
+    _homeController.getHomeUrlAsync();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+
+    return WillPopScope(
+      onWillPop: () async {
+        var canGoBack = await _webViewController.canGoBack();
+        if (canGoBack) {
+          _webViewController.goBack();
+        }
+        return Future.value(!canGoBack);
+      },
+      child: Scaffold(
+        body: Obx(
+          () => WebView(
+            debuggingEnabled: true,
+            initialUrl: _homeController.homeUrl.value,
+            javascriptMode: JavascriptMode.unrestricted,
+            onWebViewCreated: (controller) async {
+              List<Cookie> cookies =
+              await _homeController.getCookieHeadersAsync();
+              await cookieManager.clearCookies();
+              await cookieManager.setCookies(cookies);
+              _webViewController = controller;
+            },
+            javascriptChannels: Set.from([
+              JavascriptChannel(
+                  name: 'webEventCallbackHandler',
+                  onMessageReceived: (JavascriptMessage message) {
+                    print(message.message);
+                    final data = json.decode(message.message);
+                    checkCallBack(response: data);
+                  })
+            ]),
+            onPageFinished: (_) async {
+              var cookieDomain = _homeController.cookieDomain;
+              final List<Cookie> gotCookies =
+                  await cookieManager.getCookies(cookieDomain);
+              for (var item in gotCookies) {
+                print('TAG> _HomeScreenState.build Cookie  $item');
+              }
+              _webViewController.evaluateJavascript('window.function()');
+            },
+          )
+          ,
+        ),
+      ),
+    );
+  }
+
+  checkCallBack({var response}){
+    callBackHandler.webcallbackhandler(response);
+  }
+
+
+}
